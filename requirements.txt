@@ -4,6 +4,8 @@ uvicorn[standard]
 pandas[standard]
 pillow[standard]
 timm[standard]
+python-multipart[standard]
+
 
 #  ADD YOUR LIBRARIES BELOW THIS LINE
 # ======================================================
