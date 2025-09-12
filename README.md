@@ -57,12 +57,7 @@ INPUT_FEATURE_LIST = [
 MODEL_PREDICTION_TEMPLATE = [
     {
         "name": "predicted plot",
-        "value": {
-            "x": [0, 1, 2, 3],
-            "y": [0, 1, 4, 9],
-            "x_label": "X-axis",
-            "y_label": "Y-axis"
-        },
+        "type": "plot",
     }
 ]
 ```
