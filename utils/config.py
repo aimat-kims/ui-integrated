@@ -33,4 +33,8 @@ MODEL_PREDICTION_TEMPLATE=[
         "name": "your_output_name2",
         "type": "float",
     },
+    {
+        "name": "your_output_name3",
+        "type": "plot",
+    },
 ]

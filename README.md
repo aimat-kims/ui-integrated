@@ -28,8 +28,9 @@ This file defines what data your model expects as input and what it will return 
 
 5. **Configure MODEL_PREDICTION_TEMPLATE**: This defines what your model will output
    - `name`: The name of the output (e.g., "prediction", "confidence", "category")
-   - `type`: The data type of the output - can be "float", "int", "string" or "image"
+   - `type`: The data type of the output - can be "float", "int", "string", "image", or "plot"
    - **Important for image output**: When using type "image", the output value must be a base64-encoded string of the generated image
+   - **Important for plot output**: When using type "plot", include `x`, `y`, `x_label`, and `y_label` in the output value structure
 
 #### Example:
 ```python
@@ -42,6 +43,27 @@ INPUT_FEATURE_LIST = [
 MODEL_PREDICTION_TEMPLATE = [
     {"name": "predicted_price", "type": "float"},
     {"name": "confidence", "type": "float"}
+]
+```
+
+#### Example with Plot Output:
+```python
+MODEL_NAME = "Sample Model output Plot"
+INPUT_FEATURE_LIST = [
+    {"name": "bedrooms", "type": "int", "value": 3},
+    {"name": "square_feet", "type": "float", "value": 1500.0},
+    {"name": "location", "type": "string", "value": "downtown"}
+]
+MODEL_PREDICTION_TEMPLATE = [
+    {
+        "name": "predicted plot",
+        "value": {
+            "x": [0, 1, 2, 3],
+            "y": [0, 1, 4, 9],
+            "x_label": "X-axis",
+            "y_label": "Y-axis"
+        },
+    }
 ]
 ```
 
@@ -69,6 +91,14 @@ MODEL_PREDICTION_TEMPLATE = [
     {"name": "generation_time", "type": "float"}
 ]
 ```
+
+**Note**: For Plot outputs, the `value` should be a dictionary containing:
+- `x`: List of x-coordinates
+- `y`: List of y-coordinates
+- `x_label`: Label for the x-axis
+- `y_label`: Label for the y-axis
+- The len(x) should match len(y).
+
 
 **Note**: For image inputs, you need to:
 - Convert your image to base64 string format

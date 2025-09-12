@@ -1,5 +1,25 @@
 let configData = null;
 
+// Load Chart.js library dynamically
+function loadChartJS() {
+    return new Promise((resolve, reject) => {
+        if (window.Chart) {
+            resolve();
+            return;
+        }
+        
+        const script = document.createElement('script');
+        script.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+        script.onload = resolve;
+        script.onerror = reject;
+        document.head.appendChild(script);
+    });
+}
+
+// Global variables for plot management
+let currentPlotData = {};
+let plotCharts = {};
+
 // Load configuration on page load
 async function loadConfig() {
     try {
@@ -331,6 +351,239 @@ async function collectInputData() {
     return await Promise.all(promises);
 }
 
+// Update chart based on selected type
+function updateChart(plotId, canvasId, chartType) {
+    const plotData = currentPlotData[plotId];
+    const ctx = document.getElementById(canvasId).getContext('2d');
+
+    if (plotCharts[canvasId]) {
+        plotCharts[canvasId].destroy();
+    }
+
+    // Convert plot data format to Chart.js format
+    let chartData, chartOptions;
+
+    switch (chartType) {
+        case 'line':
+            chartData = {
+                labels: plotData.x,
+                datasets: [{
+                    label: plotData.y_label || 'Data',
+                    data: plotData.y,
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1
+                }]
+            };
+            chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: plotData.x_label || 'X-axis'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: plotData.y_label || 'Y-axis'
+                        }
+                    }
+                }
+            };
+            break;
+
+        case 'bar':
+            chartData = {
+                labels: plotData.x,
+                datasets: [{
+                    label: plotData.y_label || 'Data',
+                    data: plotData.y,
+                    backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                    borderColor: 'rgba(54, 162, 235, 1)',
+                    borderWidth: 1
+                }]
+            };
+            chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: plotData.x_label || 'X-axis'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: plotData.y_label || 'Y-axis'
+                        }
+                    }
+                }
+            };
+            break;
+
+        case 'scatter':
+            chartData = {
+                datasets: [{
+                    label: plotData.y_label || 'Data',
+                    data: plotData.x.map((x, i) => ({ x: x, y: plotData.y[i] })),
+                    backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                    borderColor: 'rgba(255, 99, 132, 1)',
+                }]
+            };
+            chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        type: 'linear',
+                        position: 'bottom',
+                        title: {
+                            display: true,
+                            text: plotData.x_label || 'X-axis'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: plotData.y_label || 'Y-axis'
+                        }
+                    }
+                }
+            };
+            break;
+
+        case 'histogram':
+            // Create bins for histogram
+            const values = plotData.y;
+            const bins = 10;
+            const min = Math.min(...values);
+            const max = Math.max(...values);
+            const binWidth = (max - min) / bins;
+            const binCounts = new Array(bins).fill(0);
+            const binLabels = [];
+            
+            for (let i = 0; i < bins; i++) {
+                binLabels.push(`${(min + i * binWidth).toFixed(2)}-${(min + (i + 1) * binWidth).toFixed(2)}`);
+            }
+            
+            values.forEach(value => {
+                const binIndex = Math.min(Math.floor((value - min) / binWidth), bins - 1);
+                binCounts[binIndex]++;
+            });
+            
+            chartData = {
+                labels: binLabels,
+                datasets: [{
+                    label: 'Frequency',
+                    data: binCounts,
+                    backgroundColor: 'rgba(153, 102, 255, 0.6)',
+                    borderColor: 'rgba(153, 102, 255, 1)',
+                    borderWidth: 1
+                }]
+            };
+            chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: {
+                        title: {
+                            display: true,
+                            text: plotData.y_label || 'Value Range'
+                        }
+                    },
+                    y: {
+                        title: {
+                            display: true,
+                            text: 'Frequency'
+                        }
+                    }
+                }
+            };
+            break;
+
+        case 'pie':
+            chartData = {
+                labels: plotData.x,
+                datasets: [{
+                    data: plotData.y,
+                    backgroundColor: [
+                        'rgba(255, 99, 132, 0.8)',
+                        'rgba(54, 162, 235, 0.8)',
+                        'rgba(255, 205, 86, 0.8)',
+                        'rgba(75, 192, 192, 0.8)',
+                        'rgba(153, 102, 255, 0.8)',
+                        'rgba(255, 159, 64, 0.8)'
+                    ],
+                    borderWidth: 1
+                }]
+            };
+            chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right'
+                    }
+                }
+            };
+            break;
+
+        default:
+            chartType = 'line';
+            chartData = {
+                labels: plotData.x,
+                datasets: [{
+                    label: plotData.y_label || 'Data',
+                    data: plotData.y,
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1
+                }]
+            };
+            chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false
+            };
+    }
+
+    plotCharts[canvasId] = new Chart(ctx, {
+        type: chartType,
+        data: chartData,
+        options: chartOptions
+    });
+}
+
+// Download plot image
+function downloadPlotImage(canvasId, filename) {
+    const canvas = document.getElementById(canvasId);
+    const link = document.createElement('a');
+    link.href = canvas.toDataURL('image/png');
+    link.download = `${filename}.png`;
+    link.click();
+}
+
+// Download plot data
+function downloadPlotData(plotId, filename) {
+    const plotData = currentPlotData[plotId];
+    const csvContent = [
+        [plotData.x_label || 'X', plotData.y_label || 'Y'].join(','),
+        ...plotData.x.map((x, i) => [x, plotData.y[i]].join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${filename}.csv`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+}
+
 document.getElementById('inferenceForm').addEventListener('submit', async function (e) {
     e.preventDefault();
 
@@ -377,6 +630,32 @@ document.getElementById('inferenceForm').addEventListener('submit', async functi
                                     </div>
                                 </div>
                             `;
+                } else if (item.type === 'plot') {
+                    // Display plot with chart type selector and download options
+                    const plotId = `plot_${index}`;
+                    const canvasId = `canvas_${index}`;
+                    currentPlotData[plotId] = item.value;
+                    
+                    resultHtml += `
+                        <div class="result-item plot-item">
+                            <strong>${item.name}</strong> (${item.type}):
+                            <div class="plot-controls">
+                                <label for="chartType_${index}">Chart Type:</label>
+                                <select id="chartType_${index}" onchange="updateChart('${plotId}', '${canvasId}', this.value)">
+                                    <option value="line">Line Chart</option>
+                                    <option value="bar">Column Chart</option>
+                                    <option value="scatter">Scatter Plot</option>
+                                </select>
+                                <div class="plot-download-buttons">
+                                    <button type="button" class="download-btn" onclick="downloadPlotImage('${canvasId}', '${item.name}_plot')">📥 Download Image</button>
+                                    <button type="button" class="download-btn" onclick="downloadPlotData('${plotId}', '${item.name}_data')">📊 Download Data</button>
+                                </div>
+                            </div>
+                            <div class="chart-container">
+                                <canvas id="${canvasId}" width="400" height="200"></canvas>
+                            </div>
+                        </div>
+                    `;
                 } else {
                     resultHtml += `
                                 <div class="result-item">
@@ -387,6 +666,16 @@ document.getElementById('inferenceForm').addEventListener('submit', async functi
             });
 
             output.innerHTML = resultHtml;
+            
+            // Initialize charts for plot items
+            await loadChartJS();
+            result.results.forEach((item, index) => {
+                if (item.type === 'plot') {
+                    const plotId = `plot_${index}`;
+                    const canvasId = `canvas_${index}`;
+                    setTimeout(() => updateChart(plotId, canvasId, 'line'), 100);
+                }
+            });
         } else {
             // Display error
             output.innerHTML = `<div class="error">Error: ${result.detail}</div>`;

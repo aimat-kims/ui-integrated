@@ -43,6 +43,13 @@ def run_infer(model_input:list): # PLEASE DO NOT CHANGE THE FUNCTION SIGNATURE
             output["value"] = 0.0  # Replace with actual prediction
         elif output["type"] == "int":
             output["value"] = 0  # Replace with actual prediction
+        elif output["type"] == "plot":
+            output["value"] = {
+                "x": [0, 1, 2, 3],
+                "y": [0, 1, 4, 9],
+                "x_label": "X-axis",
+                "y_label": "Y-axis",
+            }
             
     # ================================================================
 

@@ -326,3 +326,93 @@ button:disabled {
     color: #666;
     margin-bottom: 10px;
 }
+
+/* Plot visualization styles */
+.plot-item {
+    background-color: #f8f9fa;
+    border-left: 4px solid #28a745;
+}
+
+.plot-controls {
+    margin: 15px 0;
+    padding: 15px;
+    background-color: white;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.plot-controls label {
+    display: inline-block;
+    margin-right: 10px;
+    font-weight: bold;
+    color: #495057;
+}
+
+.plot-controls select {
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    background-color: white;
+    font-size: 14px;
+    margin-right: 15px;
+}
+
+.plot-download-buttons {
+    display: inline-block;
+    margin-left: 20px;
+}
+
+.plot-download-buttons .download-btn {
+    margin: 0 5px;
+    padding: 6px 12px;
+    font-size: 12px;
+    background-color: #17a2b8;
+}
+
+.plot-download-buttons .download-btn:hover {
+    background-color: #138496;
+}
+
+.chart-container {
+    margin-top: 15px;
+    padding: 20px;
+    background-color: white;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    position: relative;
+    height: 400px;
+}
+
+.chart-container canvas {
+    max-width: 100%;
+    height: 100% !important;
+}
+
+/* Responsive adjustments for plot controls */
+@media (max-width: 768px) {
+    .plot-controls {
+        text-align: center;
+    }
+    
+    .plot-controls label,
+    .plot-controls select {
+        display: block;
+        margin: 10px 0;
+        width: 100%;
+    }
+    
+    .plot-download-buttons {
+        display: block;
+        margin: 15px 0;
+    }
+    
+    .plot-download-buttons .download-btn {
+        display: block;
+        margin: 5px 0;
+        width: 100%;
+    }
+    
+    .chart-container {
+        height: 300px;
+    }
+}
