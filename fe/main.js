@@ -1,4 +1,7 @@
 let configData = null;
+let sequenceData = null;
+let currentModelIndex = 0;
+let currentModelOutput = null;
 
 // Load Chart.js library dynamically
 function loadChartJS() {
@@ -20,19 +23,29 @@ function loadChartJS() {
 let currentPlotData = {};
 let plotCharts = {};
 
+// Global variables for CSV management
+let currentCsvData = null;
+let currentCsvFilename = null;
+let currentCsvOutput = null; // Store CSV output for passing to next model
+
 // Load configuration on page load
 async function loadConfig() {
     try {
-        const response = await fetch('/config');
-        configData = await response.json();
+        const [configResponse, sequenceResponse] = await Promise.all([
+            fetch('/config'),
+            fetch('/sequence-info')
+        ]);
+        
+        configData = await configResponse.json();
+        sequenceData = await sequenceResponse.json();
 
         // Update page title and header
-        const title = `${configData.model_name} API - Model Inference`;
+        const title = `${configData.sequence_name} API - Model Sequence Inference`;
         document.getElementById('pageTitle').textContent = title;
-        document.getElementById('pageHeader').textContent = `${configData.model_name} ${configData.model_version} - Model Inference`;
+        document.getElementById('pageHeader').textContent = `${configData.sequence_name} ${configData.sequence_version} - Model Sequence (${sequenceData.total_models} models)`;
 
-        // Generate input fields dynamically
-        generateInputFields();
+        // Generate interface based on sequence
+        generateSequenceInterface();
 
         // Enable the inference button
         document.getElementById('inferButton').disabled = false;
@@ -42,43 +55,166 @@ async function loadConfig() {
     }
 }
 
-// Generate input fields based on config
-function generateInputFields() {
+// Generate sequence interface
+function generateSequenceInterface() {
     const inputFieldsContainer = document.getElementById('inputFields');
+    
     let fieldsHtml = '';
 
-    // Check if model has any image inputs or outputs
-    const hasImageInput = configData.input_features.some(feature => feature.type === 'image');
-    const hasImageOutput = configData.prediction_template.some(feature => feature.type === 'image');
+    // Check if sequence has any image inputs or outputs (for CSV functionality)
+    const hasImageInput = sequenceData.models.some(model => 
+        configData.model_sequence.find(m => m.id === model.id)?.input_features.some(f => f.type === 'image')
+    );
+    const hasImageOutput = sequenceData.models.some(model => 
+        configData.model_sequence.find(m => m.id === model.id)?.output_template.some(f => f.type === 'image')
+    );
     const hasImages = hasImageInput || hasImageOutput;
 
-    // Create desktop layout with batch and single sections side by side
-    if (!hasImages) {
+    // Generate sequence progress indicator with clickable steps
+    fieldsHtml += `
+        <div id="sequenceProgress" class="sequence-progress">
+            <h3>Model Sequence Progress - Click any model to run it individually</h3>
+            <div class="progress-steps">
+    `;
+    
+    sequenceData.models.forEach((model, index) => {
+        const isActive = index === currentModelIndex;
+        const isCompleted = index < currentModelIndex;
+        const statusClass = isCompleted ? 'completed' : (isActive ? 'active' : 'pending');
+        
         fieldsHtml += `
-            <div class="input-container">
-                <div class="batch-section">
-                    <h3>Batch Processing (CSV Upload)</h3>
-                    <div class="input-group">
-                        <label for="csvFile">Upload CSV file for batch inference</label>
-                        <input type="file" id="csvFile" accept=".csv" onchange="handleCsvUpload(this)">
-                        <div class="csv-info">
-                            <p><strong>Required columns:</strong> ${configData.input_features.map(f => f.name).join(', ')}</p>
-                            <p>The result will include your input data plus prediction columns: ${configData.prediction_template.map(f => f.name).join(', ')}</p>
-                        </div>
-                        <button type="button" id="uploadCsvBtn" onclick="uploadCsv()" disabled>Process CSV</button>
-                        <div id="csvStatus"></div>
-                    </div>
+            <div class="progress-step ${statusClass} clickable-step" id="step_${index}" onclick="selectModel(${index})">
+                <div class="step-number">${index + 1}</div>
+                <div class="step-info">
+                    <div class="step-name">${model.name}</div>
+                    <div class="step-id">${model.id}</div>
+                </div>
+            </div>
+        `;
+        
+        if (index < sequenceData.models.length - 1) {
+            fieldsHtml += `<div class="step-arrow">→</div>`;
+        }
+    });
+    
+    fieldsHtml += `
+            </div>
+            <div class="sequence-info">
+                <p><strong>How to use:</strong> Click on any model step above to select and configure that specific model for inference. Models can be run independently or in sequence.</p>
+            </div>
+        </div>
+    `;
+
+    // Current model input section
+    fieldsHtml += `
+        <div id="currentModelSection" class="current-model-section">
+            <h3 id="currentModelTitle">Current Model: ${sequenceData.models[0].name}</h3>
+            <div id="currentModelInputs">
+                <!-- Dynamic inputs will be generated here -->
+            </div>
+        </div>
+    `;
+
+    // Previous outputs section (always visible when available)
+    fieldsHtml += `
+        <div id="previousOutputsSection" class="previous-outputs-section" style="display: none;">
+            <h3>Previous Model Outputs</h3>
+            <div id="previousOutputs">
+                <!-- Previous outputs will be shown here -->
+            </div>
+        </div>
+    `;
+
+    inputFieldsContainer.innerHTML = fieldsHtml;
+    
+    // Generate inputs for the current model
+    generateCurrentModelInputs();
+}
+
+// Function to select a specific model
+function selectModel(modelIndex) {
+    if (modelIndex < 0 || modelIndex >= sequenceData.models.length) {
+        return;
+    }
+    
+    currentModelIndex = modelIndex;
+    updateProgressSteps();
+    generateCurrentModelInputs();
+    showPreviousOutputs();
+    
+    // Remove any existing next/reset buttons since user is manually selecting
+    const nextBtn = document.getElementById('nextButton');
+    if (nextBtn) nextBtn.remove();
+    
+    const resetBtn = document.getElementById('resetButton');
+    if (resetBtn) resetBtn.remove();
+    
+    // Update inference button text
+    const inferButton = document.getElementById('inferButton');
+    if (currentModelIndex === sequenceData.models.length - 1) {
+        inferButton.textContent = 'Run Final Model';
+    } else {
+        inferButton.textContent = 'Run Selected Model';
+    }
+}
+
+// Generate inputs for current model
+function generateCurrentModelInputs() {
+    const currentModelInputsContainer = document.getElementById('currentModelInputs');
+    const currentModelTitle = document.getElementById('currentModelTitle');
+    
+    if (!sequenceData || !configData) return;
+    
+    const currentModel = sequenceData.models[currentModelIndex];
+    const modelConfig = configData.model_sequence.find(m => m.id === currentModel.id);
+    
+    if (!modelConfig) return;
+    
+    // Update title
+    currentModelTitle.textContent = `Current Model: ${currentModel.name} (${currentModel.id})`;
+    
+    let inputsHtml = `<div class="model-description">${modelConfig.description}</div>`;
+    
+    // Check if model supports CSV (no image inputs/outputs)
+    const hasImageInput = modelConfig.input_features.some(f => f.type === 'image');
+    const hasImageOutput = modelConfig.output_template.some(f => f.type === 'image');
+    const supportsCsv = !hasImageInput && !hasImageOutput;
+    
+    // Create the container for side-by-side layout
+    if (supportsCsv) {
+        inputsHtml += `<div class="current-model-inputs-container">`;
+        
+        // CSV section wrapper
+        inputsHtml += `<div class="csv-section-wrapper">`;
+        inputsHtml += `
+            <div class="csv-upload-section" id="csvUploadSection">
+                <h3>📊 CSV Batch Processing (Optional)</h3>
+                <p>Upload a CSV file to process multiple rows at once. The CSV must contain columns matching the input feature names.</p>
+                
+                <div class="csv-info">
+                    <p><strong>Required CSV columns:</strong> ${modelConfig.input_features.map(f => f.name).join(', ')}</p>
+                    <p><strong>Expected format:</strong> CSV with header row containing the exact column names above</p>
                 </div>
                 
-                <div class="single-section">
-                    <h3>Single Inference</h3>
+                <input type="file" id="csvUpload" accept=".csv" onchange="handleCsvUpload(this)">
+                <button type="button" id="uploadCsvBtn" onclick="processCsvForCurrentModel()" style="display: none;">
+                    📤 Process CSV for ${currentModel.name}
+                </button>
+                
+                <div id="csvPreview" style="display: none;"></div>
+            </div>
         `;
+        inputsHtml += `</div>`; // Close csv-section-wrapper
+        
+        // Inputs section wrapper
+        inputsHtml += `<div class="inputs-section-wrapper">`;
+        inputsHtml += `<h3>Input Features</h3>`;
     }
-
-    // Generate single inference fields
-    configData.input_features.forEach(feature => {
+    
+    // Generate input fields for current model
+    modelConfig.input_features.forEach(feature => {
         if (feature.type === 'image') {
-            fieldsHtml += `
+            inputsHtml += `
                 <div class="input-group">
                     <label for="input_${feature.name}">${feature.name} <span class="type-label">(${feature.type})</span></label>
                     <input type="file" id="input_${feature.name}" accept="image/*" required onchange="previewImage(this, '${feature.name}')">
@@ -92,91 +228,392 @@ function generateInputFields() {
         } else {
             const inputType = feature.type === 'string' ? 'text' : 'number';
             const stepAttr = feature.type === 'float' ? 'step="any"' : '';
+            
+            // Check if this input should be auto-filled from previous output
+            let inputValue = feature.value;
+            let isReadonly = false;
+            let autoFillNote = '';
+            
+            if (currentModelOutput && currentModelIndex > 0) {
+                const matchingOutput = currentModelOutput.find(output => output.name === feature.name);
+                if (matchingOutput) {
+                    inputValue = matchingOutput.value;
+                    isReadonly = true;
+                    autoFillNote = '<small class="auto-fill-note">Auto-filled from previous model output</small>';
+                }
+            }
 
-            fieldsHtml += `
+            inputsHtml += `
                 <div class="input-group">
                     <label for="input_${feature.name}">${feature.name} <span class="type-label">(${feature.type})</span></label>
-                    <input type="${inputType}" ${stepAttr} id="input_${feature.name}" value="${feature.value}" required>
+                    <input type="${inputType}" ${stepAttr} id="input_${feature.name}" value="${inputValue}" ${isReadonly ? 'readonly' : 'required'} ${isReadonly ? 'class="auto-filled"' : ''}>
+                    ${autoFillNote}
                 </div>
             `;
         }
     });
-
-    // Close the single section and container if we have the desktop layout
-    if (!hasImages) {
-        fieldsHtml += `
-                </div>
-            </div>
-        `;
+    
+    // Close the wrappers if CSV is supported
+    if (supportsCsv) {
+        inputsHtml += `</div>`; // Close inputs-section-wrapper
+        inputsHtml += `</div>`; // Close current-model-inputs-container
     }
-
-    inputFieldsContainer.innerHTML = fieldsHtml;
+    
+    currentModelInputsContainer.innerHTML = inputsHtml;
 }
 
-// Handle CSV file selection
+// Handle CSV file upload
 function handleCsvUpload(input) {
     const uploadBtn = document.getElementById('uploadCsvBtn');
-    const statusDiv = document.getElementById('csvStatus');
+    const csvPreview = document.getElementById('csvPreview');
     
     if (input.files && input.files[0]) {
-        uploadBtn.disabled = false;
-        statusDiv.innerHTML = '<div class="info">CSV file selected. Click "Process CSV" to run batch inference.</div>';
+        const file = input.files[0];
+        if (file.type !== 'text/csv' && !file.name.endsWith('.csv')) {
+            alert('Please select a CSV file');
+            return;
+        }
+        
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            const csvText = e.target.result;
+            try {
+                const lines = csvText.trim().split('\n');
+                const headers = lines[0].split(',').map(h => h.trim());
+                const rows = lines.slice(1, 6); // Preview first 5 rows
+                
+                // Validate required columns
+                const currentModel = sequenceData.models[currentModelIndex];
+                const modelConfig = configData.model_sequence.find(m => m.id === currentModel.id);
+                const requiredColumns = modelConfig.input_features.map(f => f.name);
+                const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+                
+                if (missingColumns.length > 0) {
+                    alert(`Missing required columns: ${missingColumns.join(', ')}`);
+                    return;
+                }
+                
+                // Show preview
+                let previewHtml = `
+                    <div class="csv-info">
+                        <p><strong>File:</strong> ${file.name} (${lines.length - 1} rows)</p>
+                        <p><strong>Columns found:</strong> ${headers.join(', ')}</p>
+                        <p><strong>Preview (first 5 rows):</strong></p>
+                    </div>
+                    <div class="csv-table-container">
+                        <table class="csv-table">
+                            <thead><tr>
+                `;
+                
+                headers.forEach(header => {
+                    previewHtml += `<th>${escapeHtml(header)}</th>`;
+                });
+                previewHtml += '</tr></thead><tbody>';
+                
+                rows.forEach(row => {
+                    const cells = row.split(',').map(cell => cell.trim());
+                    previewHtml += '<tr>';
+                    cells.forEach(cell => {
+                        previewHtml += `<td>${escapeHtml(cell)}</td>`;
+                    });
+                    previewHtml += '</tr>';
+                });
+                
+                previewHtml += '</tbody></table></div>';
+                
+                csvPreview.innerHTML = previewHtml;
+                csvPreview.style.display = 'block';
+                uploadBtn.style.display = 'inline-block';
+                
+                // Store CSV data
+                currentCsvData = csvText;
+                currentCsvFilename = file.name;
+                
+            } catch (error) {
+                alert('Error reading CSV file: ' + error.message);
+            }
+        };
+        reader.readAsText(file);
     } else {
-        uploadBtn.disabled = true;
-        statusDiv.innerHTML = '';
+        csvPreview.style.display = 'none';
+        uploadBtn.style.display = 'none';
+        currentCsvData = null;
+        currentCsvFilename = null;
     }
 }
 
-// Upload and process CSV
-async function uploadCsv() {
-    const fileInput = document.getElementById('csvFile');
-    const uploadBtn = document.getElementById('uploadCsvBtn');
-    const statusDiv = document.getElementById('csvStatus');
-    
-    if (!fileInput.files || !fileInput.files[0]) {
-        statusDiv.innerHTML = '<div class="error">Please select a CSV file first.</div>';
+// Process CSV for current model
+async function processCsvForCurrentModel() {
+    if (!currentCsvData) {
+        alert('No CSV data available');
         return;
     }
     
-    const file = fileInput.files[0];
-    const formData = new FormData();
-    formData.append('file', file);
-    
-    // Disable button and show loading
-    uploadBtn.disabled = true;
-    uploadBtn.textContent = 'Processing...';
-    statusDiv.innerHTML = '<div class="loading">Processing CSV file... This may take a while for large files.</div>';
+    const uploadBtn = document.getElementById('uploadCsvBtn');
+    const output = document.getElementById('output');
     
     try {
-        const response = await fetch('/infer-csv/', {
+        uploadBtn.disabled = true;
+        uploadBtn.textContent = 'Processing CSV...';
+        output.innerHTML = '<div class="loading">Processing CSV through current model...</div>';
+        
+        const currentModelId = sequenceData.models[currentModelIndex].id;
+        
+        // Create FormData to send CSV file
+        const formData = new FormData();
+        const csvBlob = new Blob([currentCsvData], { type: 'text/csv' });
+        formData.append('file', csvBlob, currentCsvFilename);
+        formData.append('model_id', currentModelId);
+        
+        const response = await fetch('/infer-csv-single/', {
             method: 'POST',
             body: formData
         });
         
         if (response.ok) {
-            // Get the result as text first to parse and preview
-            const csvText = await response.text();
+            const result = await response.json();
             
-            // Show CSV preview with download option
-            showCsvPreview(csvText, `predictions_${file.name}`);
+            // Store CSV output for next model
+            currentCsvOutput = {
+                csvData: result.csv_data,
+                filename: result.filename,
+                modelId: currentModelId,
+                modelName: result.model_name
+            };
             
-            statusDiv.innerHTML = '<div class="success">CSV processed successfully! Preview and download available below.</div>';
+            // Show CSV preview
+            showCsvPreview(result.csv_data, result.filename);
+            
+            // Add next button if applicable
+            addNextButtonWithCsv();
+            addResetButton();
+            
         } else {
             const errorData = await response.json();
-            statusDiv.innerHTML = `<div class="error">Error: ${errorData.detail}</div>`;
+            output.innerHTML = `<div class="error">Error processing CSV: ${errorData.detail}</div>`;
         }
+        
     } catch (error) {
-        statusDiv.innerHTML = `<div class="error">Network error: ${error.message}</div>`;
+        output.innerHTML = `<div class="error">Network error: ${error.message}</div>`;
     } finally {
-        // Re-enable button
         uploadBtn.disabled = false;
-        uploadBtn.textContent = 'Process CSV';
+        uploadBtn.textContent = `📤 Process CSV for ${sequenceData.models[currentModelIndex].name}`;
     }
 }
 
-// Global variable to store CSV data for download
-let currentCsvData = null;
-let currentCsvFilename = null;
+// Modified next button with CSV support
+function addNextButtonWithCsv() {
+    const existingNextBtn = document.getElementById('nextButton');
+    if (existingNextBtn) existingNextBtn.remove();
+    
+    if (currentModelIndex < sequenceData.models.length - 1 && (currentModelOutput || currentCsvOutput)) {
+        const nextBtn = document.createElement('button');
+        nextBtn.id = 'nextButton';
+        nextBtn.type = 'button';
+        
+        if (currentCsvOutput) {
+            nextBtn.textContent = 'Next Model (CSV) →';
+            nextBtn.onclick = proceedToNextModelWithCsv;
+        } else {
+            nextBtn.textContent = 'Next Model →';
+            nextBtn.onclick = proceedToNextModel;
+        }
+        
+        nextBtn.className = 'next-button';
+        
+        const form = document.getElementById('inferenceForm');
+        const inferButton = document.getElementById('inferButton');
+        form.insertBefore(nextBtn, inferButton.nextSibling);
+    }
+}
+
+// Proceed to next model with CSV
+async function proceedToNextModelWithCsv() {
+    if (!currentCsvOutput || currentModelIndex >= sequenceData.models.length - 1) {
+        return;
+    }
+    
+    try {
+        // Move to next model
+        currentModelIndex++;
+        updateProgressSteps();
+        
+        // Clear previous outputs for clean transition
+        currentModelOutput = null;
+        
+        generateCurrentModelInputs();
+        showPreviousOutputs();
+        
+        // Check if next model supports CSV
+        const nextModel = sequenceData.models[currentModelIndex];
+        const nextModelConfig = configData.model_sequence.find(m => m.id === nextModel.id);
+        const nextHasImage = nextModelConfig.input_features.some(f => f.type === 'image') || 
+                           nextModelConfig.output_template.some(f => f.type === 'image');
+        
+        if (nextHasImage) {
+            // Next model has images, can't pass CSV
+            alert(`Next model "${nextModel.name}" contains image inputs/outputs and cannot process CSV data. Please use manual input.`);
+            currentCsvOutput = null;
+        } else {
+            // Auto-populate CSV for next model
+            await populateCsvForNextModel();
+        }
+        
+        // Remove next button
+        const nextBtn = document.getElementById('nextButton');
+        if (nextBtn) nextBtn.remove();
+        
+        // Update inference button text
+        const inferButton = document.getElementById('inferButton');
+        if (currentModelIndex === sequenceData.models.length - 1) {
+            inferButton.textContent = 'Run Final Model';
+        } else {
+            inferButton.textContent = 'Run Current Model';
+        }
+        
+    } catch (error) {
+        alert(`Error proceeding to next model: ${error.message}`);
+    }
+}
+
+// Populate CSV for next model
+async function populateCsvForNextModel() {
+    if (!currentCsvOutput) return;
+    
+    const csvUploadSection = document.getElementById('csvUploadSection');
+    if (!csvUploadSection) return;
+    
+    try {
+        // Parse the CSV output from previous model
+        const lines = currentCsvOutput.csvData.trim().split('\n');
+        const headers = lines[0].split(',').map(h => h.trim());
+        
+        // Get current model config
+        const currentModel = sequenceData.models[currentModelIndex];
+        const modelConfig = configData.model_sequence.find(m => m.id === currentModel.id);
+        const requiredColumns = modelConfig.input_features.map(f => f.name);
+        
+        // Check if CSV has required columns
+        const hasRequiredColumns = requiredColumns.every(col => headers.includes(col));
+        
+        if (hasRequiredColumns) {
+            // Auto-populate the CSV
+            currentCsvData = currentCsvOutput.csvData;
+            currentCsvFilename = `${currentCsvOutput.filename.replace('.csv', '')}_for_${currentModel.id}.csv`;
+            
+            // Update UI to show CSV is ready
+            const csvInfo = csvUploadSection.querySelector('.csv-info');
+            if (csvInfo) {
+                csvInfo.innerHTML = `
+                    <p><strong>✅ CSV automatically transferred from previous model</strong></p>
+                    <p><strong>File:</strong> ${currentCsvFilename} (${lines.length - 1} rows)</p>
+                    <p><strong>Columns available:</strong> ${headers.join(', ')}</p>
+                    <p><strong>Required columns:</strong> ${requiredColumns.join(', ')}</p>
+                `;
+            }
+            
+            // Show upload button
+            const uploadBtn = document.getElementById('uploadCsvBtn');
+            if (uploadBtn) {
+                uploadBtn.style.display = 'inline-block';
+                uploadBtn.textContent = `📤 Process Transferred CSV for ${currentModel.name}`;
+            }
+            
+            // Show preview
+            const csvPreview = document.getElementById('csvPreview');
+            if (csvPreview) {
+                const previewRows = lines.slice(1, 6); // First 5 rows
+                let previewHtml = `
+                    <div class="csv-info">
+                        <p><strong>Transferred CSV Preview (first 5 rows):</strong></p>
+                    </div>
+                    <div class="csv-table-container">
+                        <table class="csv-table">
+                            <thead><tr>
+                `;
+                
+                headers.forEach(header => {
+                    previewHtml += `<th>${escapeHtml(header)}</th>`;
+                });
+                previewHtml += '</tr></thead><tbody>';
+                
+                previewRows.forEach(row => {
+                    const cells = row.split(',').map(cell => cell.trim());
+                    previewHtml += '<tr>';
+                    cells.forEach(cell => {
+                        previewHtml += `<td>${escapeHtml(cell)}</td>`;
+                    });
+                    previewHtml += '</tr>';
+                });
+                
+                previewHtml += '</tbody></table></div>';
+                csvPreview.innerHTML = previewHtml;
+                csvPreview.style.display = 'block';
+            }
+            
+        } else {
+            const missingColumns = requiredColumns.filter(col => !headers.includes(col));
+            alert(`CSV from previous model is missing required columns for ${currentModel.name}: ${missingColumns.join(', ')}`);
+            currentCsvOutput = null;
+        }
+        
+    } catch (error) {
+        console.error('Error populating CSV for next model:', error);
+        alert('Error processing CSV for next model. Please upload CSV manually.');
+        currentCsvOutput = null;
+    }
+}
+
+// Proceed to next model
+async function proceedToNextModel() {
+    if (!currentModelOutput || currentModelIndex >= sequenceData.models.length - 1) {
+        return;
+    }
+    
+    try {
+        // Prepare input for next model
+        const currentModelId = sequenceData.models[currentModelIndex].id;
+        const prepareResponse = await fetch('/prepare-next/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                current_model_id: currentModelId,
+                current_output: currentModelOutput
+            })
+        });
+        
+        if (prepareResponse.ok) {
+            currentModelIndex++;
+            updateProgressSteps();
+            generateCurrentModelInputs();
+            showPreviousOutputs();
+            
+            // Remove next button
+            const nextBtn = document.getElementById('nextButton');
+            if (nextBtn) nextBtn.remove();
+            
+            // Update inference button text
+            const inferButton = document.getElementById('inferButton');
+            if (currentModelIndex === sequenceData.models.length - 1) {
+                inferButton.textContent = 'Run Final Model';
+            } else {
+                inferButton.textContent = 'Run Current Model';
+            }
+        } else {
+            const errorData = await prepareResponse.json();
+            alert(`Error preparing next model: ${errorData.detail}`);
+        }
+    } catch (error) {
+        alert(`Network error: ${error.message}`);
+    }
+}
+
+// Modified addNextButton to use CSV-aware version
+function addNextButton() {
+    addNextButtonWithCsv();
+}
 
 // Show CSV preview with download functionality
 function showCsvPreview(csvText, filename) {
@@ -185,19 +622,17 @@ function showCsvPreview(csvText, filename) {
     
     const output = document.getElementById('output');
     
-    // Parse CSV to create table
     const lines = csvText.trim().split('\n');
     const headers = lines[0].split(',').map(h => h.trim());
     const rows = lines.slice(1).map(line => line.split(',').map(cell => cell.trim()));
     
-    // Limit preview to first 10 rows
     const previewRows = rows.slice(0, 10);
     const totalRows = rows.length;
     
     let tableHtml = `
         <div class="csv-preview-section">
             <div class="csv-preview-header">
-                <h3>CSV Results Preview</h3>
+                <h3>CSV Results Preview (Full Sequence)</h3>
                 <button type="button" class="download-csv-btn" onclick="downloadCsv()">
                     📥 Download CSV
                 </button>
@@ -211,7 +646,6 @@ function showCsvPreview(csvText, filename) {
                         <tr>
     `;
     
-    // Add headers
     headers.forEach(header => {
         tableHtml += `<th>${escapeHtml(header)}</th>`;
     });
@@ -222,7 +656,6 @@ function showCsvPreview(csvText, filename) {
                     <tbody>
     `;
     
-    // Add preview rows
     previewRows.forEach(row => {
         tableHtml += '<tr>';
         row.forEach(cell => {
@@ -266,6 +699,96 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+// Update progress steps visual state
+function updateProgressSteps() {
+    if (!sequenceData) return;
+    
+    sequenceData.models.forEach((model, index) => {
+        const stepElement = document.getElementById(`step_${index}`);
+        if (stepElement) {
+            const isActive = index === currentModelIndex;
+            const isCompleted = index < currentModelIndex;
+            
+            stepElement.className = `progress-step ${isCompleted ? 'completed' : (isActive ? 'active' : 'pending')}`;
+        }
+    });
+}
+
+// Show previous outputs
+function showPreviousOutputs() {
+    const previousOutputsContainer = document.getElementById('previousOutputs');
+    const previousOutputsSection = document.getElementById('previousOutputsSection');
+    
+    if (!currentModelOutput || currentModelIndex === 0) {
+        previousOutputsSection.style.display = 'none';
+        return;
+    }
+    
+    previousOutputsSection.style.display = 'block';
+    
+    let outputsHtml = '<div class="previous-outputs-list">';
+    currentModelOutput.forEach(output => {
+        if (output.type === 'image') {
+            outputsHtml += `
+                <div class="output-item">
+                    <strong>${output.name}</strong> (${output.type}):
+                    <img src="data:image/jpeg;base64,${output.value}" style="max-width: 200px; max-height: 200px;">
+                </div>
+            `;
+        } else if (output.type === 'plot') {
+            outputsHtml += `
+                <div class="output-item">
+                    <strong>${output.name}</strong> (${output.type}): Plot data available
+                </div>
+            `;
+        } else {
+            outputsHtml += `
+                <div class="output-item">
+                    <strong>${output.name}</strong> (${output.type}): ${output.value}
+                </div>
+            `;
+        }
+    });
+    outputsHtml += '</div>';
+    
+    previousOutputsContainer.innerHTML = outputsHtml;
+}
+
+// Add reset button
+function addResetButton() {
+    const existingResetBtn = document.getElementById('resetButton');
+    if (existingResetBtn) existingResetBtn.remove();
+    
+    if (currentModelIndex > 0) {
+        const resetBtn = document.createElement('button');
+        resetBtn.id = 'resetButton';
+        resetBtn.type = 'button';
+        resetBtn.textContent = '↺ Reset to First Model';
+        resetBtn.className = 'reset-button';
+        resetBtn.onclick = resetSequence;
+        
+        const form = document.getElementById('inferenceForm');
+        const inferButton = document.getElementById('inferButton');
+        form.insertBefore(resetBtn, inferButton);
+    }
+}
+
+// Reset sequence
+function resetSequence() {
+    currentModelIndex = 0;
+    currentModelOutput = null;
+    currentCsvOutput = null;
+    updateProgressSteps();
+    generateCurrentModelInputs();
+    showPreviousOutputs();
+    
+    const nextBtn = document.getElementById('nextButton');
+    if (nextBtn) nextBtn.remove();
+    
+    const inferButton = document.getElementById('inferButton');
+    inferButton.textContent = 'Run Current Model';
+}
+
 // Preview uploaded image
 function previewImage(input, featureName) {
     const preview = document.getElementById(`preview_${featureName}`);
@@ -295,12 +818,10 @@ function downloadImage(imageId, filename) {
         return;
     }
 
-    // Create download link
     const link = document.createElement('a');
     link.href = image.src;
     link.download = `${filename}.jpg`;
     
-    // Trigger download
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -311,7 +832,6 @@ function imageToBase64(file) {
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => {
-            // Remove data:image/...;base64, prefix
             const base64 = reader.result.split(',')[1];
             resolve(base64);
         };
@@ -320,13 +840,19 @@ function imageToBase64(file) {
     });
 }
 
-// Collect input data dynamically
-async function collectInputData() {
-    const promises = configData.input_features.map(async feature => {
+// Collect input data dynamically for current model
+async function collectCurrentModelInputData() {
+    const currentModel = sequenceData.models[currentModelIndex];
+    const modelConfig = configData.model_sequence.find(m => m.id === currentModel.id);
+    
+    if (!modelConfig) {
+        throw new Error(`Model configuration not found for ${currentModel.id}`);
+    }
+    
+    const promises = modelConfig.input_features.map(async feature => {
         const element = document.getElementById(`input_${feature.name}`);
         let value;
 
-        // Convert value based on type
         if (feature.type === 'image') {
             if (element.files && element.files[0]) {
                 value = await imageToBase64(element.files[0]);
@@ -360,7 +886,6 @@ function updateChart(plotId, canvasId, chartType) {
         plotCharts[canvasId].destroy();
     }
 
-    // Convert plot data format to Chart.js format
     let chartData, chartOptions;
 
     switch (chartType) {
@@ -457,82 +982,6 @@ function updateChart(plotId, canvasId, chartType) {
             };
             break;
 
-        case 'histogram':
-            // Create bins for histogram
-            const values = plotData.y;
-            const bins = 10;
-            const min = Math.min(...values);
-            const max = Math.max(...values);
-            const binWidth = (max - min) / bins;
-            const binCounts = new Array(bins).fill(0);
-            const binLabels = [];
-            
-            for (let i = 0; i < bins; i++) {
-                binLabels.push(`${(min + i * binWidth).toFixed(2)}-${(min + (i + 1) * binWidth).toFixed(2)}`);
-            }
-            
-            values.forEach(value => {
-                const binIndex = Math.min(Math.floor((value - min) / binWidth), bins - 1);
-                binCounts[binIndex]++;
-            });
-            
-            chartData = {
-                labels: binLabels,
-                datasets: [{
-                    label: 'Frequency',
-                    data: binCounts,
-                    backgroundColor: 'rgba(153, 102, 255, 0.6)',
-                    borderColor: 'rgba(153, 102, 255, 1)',
-                    borderWidth: 1
-                }]
-            };
-            chartOptions = {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    x: {
-                        title: {
-                            display: true,
-                            text: plotData.y_label || 'Value Range'
-                        }
-                    },
-                    y: {
-                        title: {
-                            display: true,
-                            text: 'Frequency'
-                        }
-                    }
-                }
-            };
-            break;
-
-        case 'pie':
-            chartData = {
-                labels: plotData.x,
-                datasets: [{
-                    data: plotData.y,
-                    backgroundColor: [
-                        'rgba(255, 99, 132, 0.8)',
-                        'rgba(54, 162, 235, 0.8)',
-                        'rgba(255, 205, 86, 0.8)',
-                        'rgba(75, 192, 192, 0.8)',
-                        'rgba(153, 102, 255, 0.8)',
-                        'rgba(255, 159, 64, 0.8)'
-                    ],
-                    borderWidth: 1
-                }]
-            };
-            chartOptions = {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        position: 'right'
-                    }
-                }
-            };
-            break;
-
         default:
             chartType = 'line';
             chartData = {
@@ -584,6 +1033,7 @@ function downloadPlotData(plotId, filename) {
     window.URL.revokeObjectURL(url);
 }
 
+// Main form submission handler
 document.getElementById('inferenceForm').addEventListener('submit', async function (e) {
     e.preventDefault();
 
@@ -592,46 +1042,50 @@ document.getElementById('inferenceForm').addEventListener('submit', async functi
 
     // Disable button and show loading
     button.disabled = true;
+    const originalButtonText = button.textContent;
     button.textContent = 'Running...';
     output.innerHTML = '<div class="loading">Processing inference...</div>';
 
     try {
-        // Collect input data dynamically
-        const modelInput = await collectInputData();
+        // Only single model inference (step-by-step mode)
+        const modelInput = await collectCurrentModelInputData();
+        const currentModelId = sequenceData.models[currentModelIndex].id;
 
-        // Send request to inference endpoint
-        const response = await fetch('/infer/', {
+        const response = await fetch('/infer-single/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ model_input: modelInput })
+            body: JSON.stringify({ 
+                model_id: currentModelId,
+                model_input: modelInput 
+            })
         });
 
         const result = await response.json();
 
         if (response.ok) {
-            // Display success results
-            let resultHtml = `<div class="success">Inference completed successfully in ${result.duration.toFixed(3)} seconds</div>`;
+            currentModelOutput = result.results;
+            
+            // Display results
+            let resultHtml = `<div class="success">Model "${result.current_model_name}" completed successfully in ${result.duration.toFixed(3)} seconds</div>`;
             resultHtml += '<h3>Output:</h3>';
 
             result.results.forEach((item, index) => {
                 if (item.type === 'image') {
-                    // Display image from base64 with download button
                     const imageId = `result_image_${index}`;
                     resultHtml += `
-                                <div class="result-item">
-                                    <strong>${item.name}</strong> (${item.type}):
-                                    <br>
-                                    <div class="image-result-container">
-                                        <img id="${imageId}" src="data:image/jpeg;base64,${item.value}" class="image-result" alt="Result image">
-                                        <br>
-                                        <button type="button" class="download-btn" onclick="downloadImage('${imageId}', '${item.name}_output')">Download</button>
-                                    </div>
-                                </div>
-                            `;
+                        <div class="result-item">
+                            <strong>${item.name}</strong> (${item.type}):
+                            <br>
+                            <div class="image-result-container">
+                                <img id="${imageId}" src="data:image/jpeg;base64,${item.value}" class="image-result" alt="Result image">
+                                <br>
+                                <button type="button" class="download-btn" onclick="downloadImage('${imageId}', '${item.name}_output')">Download</button>
+                            </div>
+                        </div>
+                    `;
                 } else if (item.type === 'plot') {
-                    // Display plot with chart type selector and download options
                     const plotId = `plot_${index}`;
                     const canvasId = `canvas_${index}`;
                     currentPlotData[plotId] = item.value;
@@ -656,14 +1110,31 @@ document.getElementById('inferenceForm').addEventListener('submit', async functi
                             </div>
                         </div>
                     `;
+                } else if (item.type === 'csv') {
+                    // Handle CSV output type
+                    resultHtml += `
+                        <div class="result-item">
+                            <strong>${item.name}</strong> (${item.type}):
+                            <div class="csv-output-container">
+                                <p>CSV data generated with ${item.value.rows} rows</p>
+                                <button type="button" class="download-btn" onclick="downloadCsvOutput('${item.name}', ${index})">📥 Download CSV</button>
+                            </div>
+                        </div>
+                    `;
                 } else {
                     resultHtml += `
-                                <div class="result-item">
-                                    <strong>${item.name}</strong> (${item.type}): ${item.value}
-                                </div>
-                            `;
+                        <div class="result-item">
+                            <strong>${item.name}</strong> (${item.type}): ${item.value}
+                        </div>
+                    `;
                 }
             });
+
+            if (!result.is_sequence_complete) {
+                resultHtml += `<div class="info">Next model available: ${result.next_model_id}. Click "Next Model" to continue the sequence, or click any model step above to jump to a specific model.</div>`;
+            } else {
+                resultHtml += `<div class="success">🎉 This was the final model in the sequence!</div>`;
+            }
 
             output.innerHTML = resultHtml;
             
@@ -676,8 +1147,11 @@ document.getElementById('inferenceForm').addEventListener('submit', async functi
                     setTimeout(() => updateChart(plotId, canvasId, 'line'), 100);
                 }
             });
+
+            // Add next/reset buttons
+            addNextButton();
+            addResetButton();
         } else {
-            // Display error
             output.innerHTML = `<div class="error">Error: ${result.detail}</div>`;
         }
 
@@ -686,7 +1160,7 @@ document.getElementById('inferenceForm').addEventListener('submit', async functi
     } finally {
         // Re-enable button
         button.disabled = false;
-        button.textContent = 'Run Inference';
+        button.textContent = originalButtonText;
     }
 });
 
