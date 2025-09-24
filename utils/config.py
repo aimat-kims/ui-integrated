@@ -26,6 +26,11 @@ MODEL_SEQUENCE = [
                 "name": "input_feature_3",
                 "type": "string",
                 "value": "test"
+            },
+            {
+                "name": "input_feature_4",
+                "type": "image",
+                "value": "test"
             }
         ],
         "output_template": [
