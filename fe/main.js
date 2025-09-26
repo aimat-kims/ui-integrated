@@ -209,6 +209,11 @@ function generateCurrentModelInputs() {
         // Inputs section wrapper
         inputsHtml += `<div class="inputs-section-wrapper">`;
         inputsHtml += `<h3>Input Features</h3>`;
+        inputsHtml += `<div class="input-features-grid">`;
+    } else {
+        // For models without CSV support, still use grid layout for inputs
+        inputsHtml += `<h3>Input Features</h3>`;
+        inputsHtml += `<div class="input-features-grid">`;
     }
     
     // Generate input fields for current model
@@ -217,11 +222,12 @@ function generateCurrentModelInputs() {
             inputsHtml += `
                 <div class="input-group">
                     <label for="input_${feature.name}">${feature.name} <span class="type-label">(${feature.type})</span></label>
-                    <input type="file" id="input_${feature.name}" accept="image/*" required onchange="previewImage(this, '${feature.name}')">
+                    <input type="file" id="input_${feature.name}" accept="image/*" onchange="previewImage(this, '${feature.name}')">
                     <div class="image-preview-container">
-                        <img id="preview_${feature.name}" class="image-preview" alt="Image preview">
+                        <img id="preview_${feature.name}" class="image-preview" alt="Image preview" ${feature.value ? `src="data:image/png;base64,${feature.value}" style="display: block;"` : ''}>
                         <br>
-                        <button type="button" class="download-btn" id="download_input_${feature.name}" style="display: none;" onclick="downloadImage('preview_${feature.name}', '${feature.name}_input')">Download</button>
+                        <button type="button" class="download-btn" id="download_input_${feature.name}" ${feature.value ? 'style="display: inline-block;"' : 'style="display: none;"'} onclick="downloadImage('preview_${feature.name}', '${feature.name}_input')">Download</button>
+                        
                     </div>
                 </div>
             `;
@@ -253,7 +259,9 @@ function generateCurrentModelInputs() {
         }
     });
     
-    // Close the wrappers if CSV is supported
+    // Close the grid and wrappers
+    inputsHtml += `</div>`; // Close input-features-grid
+    
     if (supportsCsv) {
         inputsHtml += `</div>`; // Close inputs-section-wrapper
         inputsHtml += `</div>`; // Close current-model-inputs-container
@@ -855,9 +863,13 @@ async function collectCurrentModelInputData() {
 
         if (feature.type === 'image') {
             if (element.files && element.files[0]) {
+                // User uploaded a new image
                 value = await imageToBase64(element.files[0]);
+            } else if (feature.value) {
+                // Use default base64 image from configuration
+                value = feature.value;
             } else {
-                throw new Error(`Please select an image for ${feature.name}`);
+                throw new Error(`Please select an image for ${feature.name} or ensure a default image is configured`);
             }
         } else if (feature.type === 'int') {
             value = parseInt(element.value);

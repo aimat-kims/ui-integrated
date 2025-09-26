@@ -25,8 +25,9 @@ h1 {
     border: 2px dashed #007bff;
     border-radius: 8px;
     padding: 20px;
-    margin-bottom: 0; /* Remove bottom margin in side-by-side layout */
-    height: fit-content; /* Don't stretch to match input section height */
+    margin-bottom: 30px; /* Increased bottom margin */
+    width: 100%;
+    box-sizing: border-box;
 }
 
 .csv-upload-section h3 {
@@ -242,19 +243,72 @@ button:disabled {
 
 /* Desktop layout for CSV and input fields */
 .current-model-inputs-container {
-    display: flex;
-    gap: 30px;
+    display: block; /* Changed from flex to block for separate sections */
     margin-top: 20px;
 }
 
 .csv-section-wrapper {
-    flex: 0 0 45%; /* Fixed width for CSV section */
-    min-width: 0; /* Prevent flex item from overflowing */
+    width: 100%; /* Full width for CSV section */
+    margin-bottom: 30px; /* Add spacing between sections */
 }
 
 .inputs-section-wrapper {
-    flex: 1; /* Take remaining space */
-    min-width: 0; /* Prevent flex item from overflowing */
+    width: 100%; /* Full width for inputs section */
+}
+
+.inputs-section-wrapper h3 {
+    color: #007bff;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 10px;
+    margin-bottom: 20px;
+}
+
+/* Input features grid layout */
+.input-features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    max-width: 100%;
+}
+
+/* Ensure maximum 3 columns */
+@media (min-width: 1200px) {
+    .input-features-grid {
+        grid-template-columns: repeat(3, 1fr);
+    }
+}
+
+/* For smaller screens, ensure responsive behavior */
+@media (max-width: 900px) {
+    .input-features-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+@media (max-width: 650px) {
+    .input-features-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Individual input group styling within grid */
+.input-features-grid .input-group {
+    margin: 0; /* Remove default margin since grid handles spacing */
+    padding: 15px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+    background-color: #f9f9f9;
+    min-width: 300px; /* Ensure minimum width */
+    box-sizing: border-box;
+}
+
+/* Ensure input fields within grid items take full width */
+.input-features-grid .input-group input[type="text"], 
+.input-features-grid .input-group input[type="number"],
+.input-features-grid .input-group input[type="file"] {
+    width: 100%;
+    box-sizing: border-box;
 }
 
 /* Mobile responsive */
@@ -270,18 +324,26 @@ button:disabled {
     
     /* Stack CSV and input sections vertically on mobile */
     .current-model-inputs-container {
-        flex-direction: column;
-        gap: 20px;
+        display: block;
     }
     
     .csv-section-wrapper,
     .inputs-section-wrapper {
-        flex: none;
         width: 100%;
+        margin-bottom: 20px;
+    }
+    
+    .input-features-grid {
+        grid-template-columns: 1fr;
+        gap: 15px;
+    }
+    
+    .input-features-grid .input-group {
+        min-width: auto; /* Remove min-width on mobile */
     }
     
     .csv-upload-section {
-        margin-bottom: 20px; /* Restore bottom margin on mobile */
+        margin-bottom: 20px;
     }
 }
 
@@ -745,4 +807,18 @@ button:disabled {
     background: linear-gradient(135deg, #d4edda 0%, #c3e6cb 100%);
     border: 2px solid #28a745;
     font-weight: bold;
+}
+
+/* Default image note styling */
+.default-image-note {
+    display: block;
+    margin-top: 8px;
+    color: #28a745;
+    font-style: italic;
+    font-size: 12px;
+    background-color: #d4edda;
+    border: 1px solid #c3e6cb;
+    padding: 5px 8px;
+    border-radius: 3px;
+    text-align: center;
 }
