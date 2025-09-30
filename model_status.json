@@ -1,0 +1,27 @@
+{
+  "timestamp": "",
+  "models": {
+    "1_1_ucs_bt_model_template": {"status": "success", "port": 8000}
+,
+    "1_2_ucs_sl_model_template": {"status": "success", "port": 8001}
+,
+    "1_3_ys_model_template": {"status": "success", "port": 8002}
+,
+    "2_crepp_life_model_template": {"status": "success", "port": 8003}
+,
+    "3_weight_change_model_template": {"status": "success", "port": 8004}
+,
+    "ai-thermo.s-master_model": {"status": "success", "port": 8005}
+,
+    "ai-thermo.s-model-template-master_sampliing": {"status": "success", "port": 8006}
+,
+    "kaistactivelearning": {"status": "success", "port": 8007}
+,
+    "matssl-infer": {"status": "success", "port": 8008}
+,
+    "model-seq-template-full": {"status": "success", "port": 8010}
+,
+    "model-template_microseg": {"status": "success", "port": 8011}
+
+  }
+}

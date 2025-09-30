@@ -1,0 +1,454 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Model API Gateway</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #333;
+            margin: 30px 0 20px 0;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section-icon {
+            font-size: 24px;
+        }
+        .info-banner {
+            background: #e7f3ff;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+        .info-banner h3 {
+            margin: 0 0 10px 0;
+            color: #0066cc;
+        }
+        .info-banner p {
+            margin: 0;
+            color: #333;
+            font-size: 14px;
+        }
+        .models-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 30px;
+            margin-top: 20px;
+        }
+        
+        .models-grid.sequence {
+            grid-template-columns: 1fr;
+        }
+        
+        .model-card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 15px;
+            background: #f9f9f9;
+            transition: transform 0.2s, box-shadow 0.2s;
+            border-left: 5px solid #28a745;
+        }
+        .model-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        .model-card.sequence {
+            background: #f0f8ff;
+            border-left: 5px solid #17a2b8;
+        }
+        
+        .model-content {
+            display: flex;
+            align-items: flex-start;
+            gap: 25px;
+            margin: 15px 0;
+        }
+        
+        .model-info {
+            flex: 4;
+            min-width: 0;
+        }
+        
+        .model-figure {
+            flex: 6;
+            max-width: none;
+        }
+        
+        .model-figure img {
+            width: 100%;
+            height: auto;
+            max-height: 500px;
+            object-fit: cover;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            box-shadow: 0 3px 6px rgba(0,0,0,0.15);
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        
+        .model-figure img:hover {
+            transform: scale(1.02);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.25);
+        }
+        
+        .model-description {
+            color: #666;
+            font-size: 14px;
+            line-height: 1.5;
+            margin-bottom: 12px;
+            font-style: italic;
+        }
+        
+        .model-name {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 8px;
+            color: #333;
+        }
+        .model-version {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 10px;
+            font-style: italic;
+        }
+        .sequence-models-list {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 15px;
+        }
+        .sequence-models-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #666;
+            margin-bottom: 8px;
+        }
+        .sequence-models-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+        .sequence-model-item {
+            background: white;
+            border: 1px solid #e9ecef;
+            border-radius: 3px;
+            padding: 8px;
+            font-size: 12px;
+            flex: 1;
+            min-width: 150px;
+        }
+        .sequence-model-name {
+            font-weight: bold;
+            color: #0c5460;
+            margin-bottom: 4px;
+        }
+        .sequence-model-desc {
+            color: #6c757d;
+            font-style: italic;
+        }
+        .model-actions {
+            margin-top: 15px;
+        }
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            margin-right: 10px;
+            margin-bottom: 5px;
+            text-decoration: none;
+            border-radius: 4px;
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            margin-bottom: 20px;
+            padding: 20px;
+            background: #e9ecef;
+            border-radius: 8px;
+        }
+        .stat {
+            text-align: center;
+        }
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #007bff;
+        }
+        .stat-label {
+            font-size: 14px;
+            color: #666;
+        }
+        .no-models-message {
+            text-align: center;
+            padding: 40px 20px;
+            color: #6c757d;
+            font-style: italic;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .feature-info {
+            font-size: 11px;
+            color: #6c757d;
+            margin-top: 8px;
+        }
+        .input-count, .output-count {
+            background: #e9ecef;
+            color: #495057;
+            padding: 2px 6px;
+            border-radius: 10px;
+            font-size: 10px;
+            margin-right: 5px;
+        }
+        
+        /* Image Modal Styles */
+        .image-modal {
+            display: none;
+            position: fixed;
+            z-index: 10000;
+            padding-top: 50px;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.9);
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        
+        .image-modal.show {
+            display: block;
+        }
+        
+        .modal-content {
+            margin: auto;
+            display: block;
+            width: 90%;
+            max-width: 1200px;
+            max-height: 80%;
+            object-fit: contain;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(255, 255, 255, 0.1);
+            animation: zoomIn 0.3s ease-in-out;
+        }
+        
+        .close-modal {
+            position: absolute;
+            top: 20px;
+            right: 35px;
+            color: #fff;
+            font-size: 40px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: color 0.3s ease;
+        }
+        
+        .close-modal:hover,
+        .close-modal:focus {
+            color: #ccc;
+            text-decoration: none;
+        }
+        
+        .modal-caption {
+            margin: auto;
+            display: block;
+            width: 80%;
+            max-width: 700px;
+            text-align: center;
+            color: #ccc;
+            padding: 10px 0;
+            font-size: 16px;
+            font-weight: 300;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        
+        @keyframes zoomIn {
+            from { transform: scale(0.8); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        
+        /* Mobile responsive for modal */
+        @media (max-width: 768px) {
+            .modal-content {
+                width: 95%;
+                max-height: 70%;
+            }
+            
+            .close-modal {
+                top: 10px;
+                right: 20px;
+                font-size: 30px;
+            }
+            
+            .modal-caption {
+                font-size: 14px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🚀 KIMS - AIMAT Model Hub</h1>
+    
+        <!-- Sequence Models Section -->
+        {% if sequence_models %}
+        <h2><span class="section-icon">🔗</span>Sequence Models</h2>
+        <div class="models-grid sequence">
+            {% for model in sequence_models %}
+            {% if model.get("status") == "success" and model.get("port") %}
+            <div class="model-card sequence">
+                <div class="model-name">{{ model.get("sequence_name", "Unknown Sequence") }}</div>
+                <div class="model-version">{{ model.get("sequence_version", "Unknown Version") }}</div>
+                
+                {% if model.get("model_sequence") %}
+                <div class="sequence-models-list">
+                    <div class="sequence-models-title">Models in Sequence ({{ model.model_sequence|length }}):</div>
+                    <div class="sequence-models-row">
+                        {% for seq_model in model.model_sequence %}
+                        <div class="sequence-model-item">
+                            <div class="sequence-model-name">{{ seq_model.get("name", "Unknown") }}</div>
+                            <div class="sequence-model-desc">{{ seq_model.get("description", "No description") }}</div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                
+                <div class="model-actions">
+                    <a href="/api/{{ model.key }}/" class="btn btn-primary">🚀 Run Model</a>
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <h2><span class="section-icon">🔗</span>Sequence Models</h2>
+        <div class="no-models-message">No sequence models available</div>
+        {% endif %}
+        
+        <!-- Single Models Section -->
+        {% if single_models %}
+        <h2><span class="section-icon">🤖</span>Single Models</h2>
+        <div class="models-grid">
+            {% for model in single_models %}
+            {% if model.get("status") == "success" and model.get("port") %}
+            <div class="model-card">
+                <div class="model-content">
+                    <div class="model-info">
+                        <div class="model-name">{{ model.get("model_name", "Unknown Model") }}</div>
+                        <div class="model-version">{{ model.get("model_version", "Unknown Version") }}</div>
+                        
+                        {% if model.get("model_description") %}
+                        <div class="model-description">{{ model.get("model_description") }}</div>
+                        {% endif %}
+                        
+                        {% if model.get("input_features") or model.get("prediction_template") %}
+                        <div class="feature-info">
+                            {% if model.get("input_features") %}
+                            <span class="input-count">📥 {{ model.input_features|length }} inputs</span>
+                            {% endif %}
+                            {% if model.get("prediction_template") %}
+                            <span class="output-count">📤 {{ model.prediction_template|length }} outputs</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        
+                        <div class="model-actions">
+                            <a href="/api/{{ model.key }}/" class="btn btn-primary">🚀 Run Model</a>
+                        </div>
+                    </div>
+                    
+                    {% if model.get("model_figure") %}
+                    <div class="model-figure">
+                        <img src="/api/{{ model.key }}/{{ model.get("model_figure") }}" alt="Model Figure" 
+                             onclick="openImageModal(this)" 
+                             onerror="this.style.display='none'">
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
+            {% endfor %}
+        </div>
+        {% else %}
+        <h2><span class="section-icon">🤖</span>Single Models</h2>
+        <div class="no-models-message">No single models available</div>
+        {% endif %}
+    </div>
+    
+    <!-- Image Modal -->
+    <div id="imageModal" class="image-modal">
+        <span class="close-modal" onclick="closeImageModal()">&times;</span>
+        <img class="modal-content" id="modalImage">
+        <div id="modalCaption" class="modal-caption"></div>
+    </div>
+    
+    <script>
+        function openImageModal(img) {
+            var modal = document.getElementById('imageModal');
+            var modalImg = document.getElementById('modalImage');
+            var captionText = document.getElementById('modalCaption');
+            
+            modal.classList.add('show');
+            modalImg.src = img.src;
+            captionText.innerHTML = img.alt;
+        }
+        
+        function closeImageModal() {
+            var modal = document.getElementById('imageModal');
+            modal.classList.remove('show');
+        }
+        
+        // Close modal when clicking outside the image
+        document.getElementById('imageModal').addEventListener('click', function(e) {
+            if (e.target === this) {
+                closeImageModal();
+            }
+        });
+        
+        // Close modal with Escape key
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape') {
+                closeImageModal();
+            }
+        });
+    </script>
+</body>
+</html>

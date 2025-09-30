@@ -1,11 +1,4 @@
-#  DO NOT REMOVE THESE LIBRARIES
-fastapi[standard] 
-uvicorn[standard]
-pandas[standard]
-pillow[standard]
-timm[standard]
-python-multipart[standard]
-
-#  ADD YOUR LIBRARIES BELOW THIS LINE
-# ======================================================
-# ======================================================
+fastapi
+uvicorn
+httpx
+jinja2
