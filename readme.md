@@ -14,7 +14,9 @@ Follow these steps in order to properly run the application:
 
 ### 1. Make Shell Scripts Executable
 
-First, make the shell scripts executable by running:
+First, Create `models/` folder and put all your model templates there.
+
+Then, make the shell scripts executable by running:
 
 ```bash
 chmod +x run_models.sh
